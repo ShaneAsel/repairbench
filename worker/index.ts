@@ -1,5 +1,7 @@
 interface Env {
-  ASSETS: Fetcher;
+  ASSETS: {
+    fetch(request: Request): Promise<Response>;
+  };
 }
 
 const WEBMCP_HEADERS = {
@@ -8,8 +10,20 @@ const WEBMCP_HEADERS = {
 } as const;
 
 export default {
-  async fetch(request, env): Promise<Response> {
-    const assetResponse = await env.ASSETS.fetch(request);
+  async fetch(request: Request, env: Env): Promise<Response> {
+    let assetResponse = await env.ASSETS.fetch(request);
+
+    if (
+      assetResponse.status === 404 &&
+      (request.method === "GET" || request.method === "HEAD") &&
+      request.headers.get("Accept")?.includes("text/html")
+    ) {
+      const indexUrl = new URL(request.url);
+      indexUrl.pathname = "/index.html";
+      indexUrl.search = "";
+      assetResponse = await env.ASSETS.fetch(new Request(indexUrl, request));
+    }
+
     const headers = new Headers(assetResponse.headers);
 
     for (const [name, value] of Object.entries(WEBMCP_HEADERS)) {
@@ -22,4 +36,4 @@ export default {
       headers,
     });
   },
-} satisfies ExportedHandler<Env>;
+};
